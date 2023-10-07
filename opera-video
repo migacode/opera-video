@@ -1,0 +1,145 @@
+#!/bin/bash
+###############################################################################
+#                                                                             #
+#                           Opera Video Repair Tool                           #
+#          ---------------------------------------------------------          #
+#                           For Debian based systems                          #
+#                                                                             #
+#                       (C)opyright bei Michael Gasbers                       #
+#                      MIGANO Professional Web Solutions                      #
+#                                                                             #
+#                             All rights reserved.                            #
+#                                                                             #
+###############################################################################
+#                                                                             #
+# DIESE SOFTWARE WIRD OHNE MÄNGELGEWÄHR UND OHNE JEGLICHE AUSDRÜCKLICHE ODER  #
+# STILLSCHWEIGENDE GARANTIE ZUR VERFÜGUNG GESTELLT, EINSCHLIESSLICH UND OHNE  #
+# EINSCHRÄNKUNG JEGLICHER GARANTIE FÜR DIE GEBRAUCHSTAUGLICHKEIT ODER EIGNUNG #
+# FÜR EINEN BESTIMMTEN ZWECK. ALLE RISIKEN IN BEZUG AUF ERGEBNISSE UND        #
+# LEISTUNG DIESER SOFTWARE WERDEN VOLLSTÄNDIG VOM BENUTZER ÜBERNOMMEN!        #
+#  *************************************************************************  #
+# THIS SOFTWARE IS PROVIDED "AS IS" WITH NO WARRANTIES WHAT SO EVER, WHETHER  #
+# EXPRESSED OR IMPLIED, INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF       #
+# USABILITY OR FITNESS FOR A PARTICULAR PURPOSE. ALL RISKS CONCERNING RESULTS #
+# AND PERFORMANCE OF THIS SOFTWARE ARE ASSUMED COMPLETELY BY THE USER!        #
+#                                                                             #
+###############################################################################
+#                                                                             #
+#  Jegliche Form der Kopie, Veränderung und kommerziellen Verbreitung dieses  #
+#  Scripts oder Teilen davon sowie des Quellcodes ist strengstens verboten!   #
+#  *************************************************************************  #
+#   Any form of copying, modification or commercial distribution of this      #
+#   script or any part thereof or it's sourcecode is strictly prohibited!     #
+#  *************************************************************************  #
+#   Für Anregungen und Fragen nehmen Sie bitte Kontakt mit uns auf über       #
+#   https://migano.de oder per E-Mail an >> kontakt@migano.de <<. Danke.      #
+#                                                                             #
+###############################################################################
+VERSION="1.10"
+# Letzte Änderung: 07.10.2023
+###############################################################################
+
+OPERA_PATH="/usr/lib/x86_64-linux-gnu/opera"
+OPERA_LIB="$OPERA_PATH/libffmpeg.so"
+
+bold_red='\033[1;31m'
+bold_green='\033[1;32m'
+bold_yellow='\033[1;33m'
+bold_blue='\033[1;34m'
+bold_white='\033[1;37m'
+bg_blue='\033[44m'
+light_blue='\033[0;94m'
+colors_off='\033[0m'
+FULLSPACE=$(printf '\x20%.0s' {1..80})
+echo -e "${bg_blue}$FULLSPACE${colors_off}"
+echo -e "${bold_white}${bg_blue}                            Opera Video Repair Tool                             ${colors_off}"
+echo -e "${light_blue}${bg_blue}                             by Michael G. | v$VERSION                              ${colors_off}"
+echo -e "${bg_blue}$FULLSPACE${colors_off}"
+echo -e ""
+if [ $(id -u) -ne 0 ];
+then
+  echo -e " Bitte als Superuser aufrufen!"
+  exit 1
+fi
+if [ $(ps -def | grep -i -c -E "$OPERA_PATH" 2>/dev/null) -gt 1 ];
+then
+  echo -e " Bitte erst alle Instanzen von Opera beenden!"
+  exit 1
+fi
+if [ ! -s "$OPERA_LIB" ];
+then
+  echo -e " Opera(-Stable) scheint nicht aus dem Repository installiert zu sein."
+  echo -e " Die Snap-Version wird bereits mit angepasstem Decoder ausgeliefert."
+  exit 1
+fi
+echo -e " Nach der Installation von Opera per Download von den Original-Seiten (nicht"
+echo -e " als Snap-App) bzw. nach Updates des Original-Opera kann es passieren, dass"
+echo -e " Videos nicht mehr abgespielt werden, da Opera einen ungeeigneten FFMPEG-"
+echo -e " Decoder verwendet. Daher muss dieser durch einen anderen Decoder ersetzt"
+echo -e " werden. Dieses Tool sucht eine passende libbffmpeg-Bibliothek und bindet"
+echo -e " diese in Opera ein. Selbstverständlich wird die entsprechende Original-"
+echo -e " Datei vorher gesichert. Hinweis: Es muss eine geeignete libbffmpeg.so auf"
+echo -e " dem System installiert sein, wie sie bspw. in Chromium enthalten ist."
+echo ""
+
+echo -e -n " Suche nach anderen installierten ${bold_yellow}libffmpeg.so${colors_off}, bitte warten ... "
+IFS=$'\n'
+FFMPEG_LIBS=($(sudo find / -name "libffmpeg.so" 2>/dev/null))
+unset IFS
+declare -a LIB_FILES
+TOTAL_LIBS=${#FFMPEG_LIBS[@]}
+
+i=0
+for lib_file in ${FFMPEG_LIBS[@]}
+do
+  if [ "$lib_file" != "$OPERA_LIB" ];
+  then
+    LIB_FILES[$i]="$lib_file"
+    ((i+=1))
+  fi
+done
+
+if [ $i -gt 0 ];
+then
+  ((i-=1))
+  echo -e "${bold_green}ok${colors_off}"
+  echo -e " Passende Dateien gefunden in:"
+  z=0
+  while [ $z -le $i ];
+  do
+    echo -e " ($z) ${LIB_FILES[$z]//libffmpeg.so/}"
+    ((z+=1))
+  done
+  echo -e ""
+  auswahl=-1
+  while [ $auswahl -lt 0 ] ||
+        [ $auswahl -gt $i ];
+  do
+    echo -e -n " Bitte Auswahl treffen oder Ctrl-C zum Abbrechen (0..$i): "
+    read auswahl
+  done
+  if [ ! -f "$OPERA_LIB.bak" ];
+  then
+    echo -e -n " Lege Backup von "$OPERA_LIB" an ... "
+    cp "$OPERA_LIB" "$OPERA_LIB.bak" &>/dev/null
+    if [ $? -eq 0 ];
+    then
+      echo -e "${bold_green}ok${colors_off}"
+    else
+      echo -e "${bold_red}Fehler${colors_off}"
+    fi
+  fi
+  echo -e -n " Verknüpfe ${bold_yellow}${LIB_FILES[$auswahl]}${colors_off} ... "
+  sudo ln -s -f ${LIB_FILES[$auswahl]} $OPERA_LIB &>/dev/null
+  if [ $? -eq 0 ];
+  then
+    echo -e "${bold_green}ok${colors_off}"
+    echo -e " Du kannst jetzt versuchen Opera wieder zu starten - viel Erfolg!"
+  else
+    echo -e "${bold_red}Fehler${colors_off}"
+    echo -e " Das hat leider nicht geklappt!"
+  fi
+else
+  echo -e "${bold_red}Fehler${colors_off}"
+  echo -e " Keine passenden Dateien gefunden!"
+fi
